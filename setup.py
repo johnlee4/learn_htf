@@ -6,9 +6,6 @@ setup(
     version="0.1",
     packages=find_packages(),
     install_requires=[
-        "numpy",
-        "scipy",
-        "pandas"
     ],
     author="John Lee",
     description="A custom machine learning package.\

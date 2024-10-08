@@ -7,10 +7,12 @@ Oct 2024
 """
 
 import numpy as np
+from typing import Union
 from scipy.linalg import svd
 
 from learn_htf.core.matrix import Matrix
-
+from learn_htf.core.model import Model
+from learn_htf.utils.metrics import lp_norm
 # TODO Principle component regression
 # TODO SVD/cholesky/QR decomp
 # TODO handle sparse data
@@ -19,17 +21,16 @@ from learn_htf.core.matrix import Matrix
 # model.fit()
 
 
-class LinearRegression:
+class LinearRegression(Model):
     """
     Linear regression model using least squares
     """
 
-    def __init__(self):
-        self.coefficients = None
-        self.score = None
-        self.trained = False
+    def __init__(self, ridge_lambda: float = 0):
+        super().__init__(ridge_lambda=ridge_lambda)
+        self.ridge_lambda = self.model_params['ridge_lambda']
 
-    def fit(self, x: Matrix, y: Matrix, ridge_lambda: float = 0):
+    def _fit(self, x: Union[Matrix, np.ndarray], y: Union[Matrix, np.ndarray]):
         """
         Calculates the coefficients (B_i) of a linear fit
             f(X) = B_0 + Sum( X_i B_i )
@@ -43,37 +44,57 @@ class LinearRegression:
         Returns:
             _type_: Coefficients of linear fit: Size M+1 x K
         """
+        if isinstance(x, np.ndarray):
+            x = Matrix(x)
+        if isinstance(y, np.ndarray):
+            y = Matrix(y)
+        xfeats = x.features
+
         assert x.shape[0] == y.shape[0]
 
         n, p = x.shape
-        x = np.hstack([np.ones((n, 1)), x])
-        coef = np.linalg.inv(x.T @ x - ridge_lambda * np.eye(p+1)) @ x.T @ y
+        x = Matrix(np.hstack([Matrix(np.ones(n)), x]))
+        coef = np.linalg.solve(
+            x.T @ x - self.model_params['ridge_lambda'] * Matrix(np.eye(p+1)), x.T @ y)
 
-        self.coefficients = coef
-        self.trained = True
+        samps = [fr'beta_{i}' for i in range(p+1)]
+        # TODO use feature space instead of betas - need to include the intercept as well
+        coef = Matrix(coef, samples=samps, features=xfeats)
 
-    def predict(self):
+        return coef
+
+    def _predict(self, x):
         """ TODO
         """
-        pass
+        xsamps = x.samples
+        xfeats = x.features
+        n = x.shape[0]
 
-    def score(self, yhat, y):
+        x = Matrix(np.hstack([Matrix(np.ones(n)), x]))
+
+        preds = Matrix((self.coefficients.T @ x.T).T)
+        preds.samples = xsamps
+        preds.features = xfeats
+
+        return preds
+
+    def score(self,  y: Matrix, predictions: Matrix):
         """ TODO
         """
+
+        return lp_norm(y, predictions, p=2)
+
+
+class PrincipleComponentsRegression(Model):
+
+    def _fit(self, x, y):
         pass
 
+    def predict(self, x):
+        pass
 
-def least_squres_fit(x: Matrix, y: Matrix, ridge_lambda: float = 0):
-
-    return coef
-
-
-def least_squares_eval(coef, x):
-    N, p = x.shape
-    yhat = x@coef
-    variance = 1/(N - p-1) * np.sum((yhat - y)**2, 1)
-
-    return yhat
+    def score(self, x, y):
+        pass
 
 
 def principle_components_regression(x: np.ndarray, y: np.ndarray, pct_variance=.9, x_centered=False):
