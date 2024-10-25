@@ -27,7 +27,8 @@ class Model(ABC):
 
     def __init__(self, **kwargs):
         self.model_type = self.__class__.__name__
-        self._log = log.get_log()
+        self._log = log.get_log(self.__class__.__name__)
+        log.configure_logging()
 
         self.coefficients = None
         self.fitted = False
@@ -69,14 +70,12 @@ class Model(ABC):
             y (Matrix): _description_
         """
 
-        x = Matrix(x)
         self._log.info("Fitting %s", self)
 
         # returns a Matrix object
         self.coefficients = self._fit(x, y)
         self.fitted = True
 
-        self._log.info("Got %s", self.coefficients)
         return self.coefficients
 
     def predict(self, x: Matrix):
@@ -88,8 +87,12 @@ class Model(ABC):
         Returns:
             _type_: _description_
         """
-        self._log.info("Predicting %s", self)
-        self.predictions = self._predict(x)
+        x = Matrix(x)
+        if self.fitted:
+            self._log.info("Predicting %s", self)
+            self.predictions = self._predict(x)
+        else:
+            raise ValueError(f'{self.model_type} has not been fitted yet!')
         return self.predictions
 
     def save_model(self, filepath: Union[Path, str]):

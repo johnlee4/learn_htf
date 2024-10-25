@@ -9,12 +9,11 @@ class Matrix(np.ndarray):
     to standard mathematical formats etc
 
     Includes sample and feature dataframes for metadata storage, motivated by anndata package
-    Author: John Lee 
+    Author: John Lee
     Oct 2024
     """
 
     def __new__(cls, input_array,  samples=None, features=None):
-        # Step 1: Create a NumPy array (or subclass) from the input array
         input_array = np.asarray(input_array)
 
         if input_array.ndim == 1:
@@ -22,28 +21,46 @@ class Matrix(np.ndarray):
         elif input_array.ndim == 0:
             input_array = input_array[np.newaxis, np.newaxis]
         elif input_array.ndim > 2:
-            raise ValueError("Input data must be 1D, 2D")
+            raise ValueError("Input data must be 1D or 2D")
 
         obj = np.asarray(input_array).view(cls)  # cls refers to MyArray
         n, m = obj.shape
         if samples is not None:
-            assert len(
-                samples) == n, f"len(samples) == {len(samples)}. Expected {n} "
+            ls = len(samples)
+            if ls != n:
+                raise ValueError(
+                    f'Sample shape does not match input array. Expected {n}, got {ls}.')
+
+            if isinstance(samples, pd.DataFrame):
+                obj.samples = samples
+            elif isinstance(samples, (list, tuple, dict, set, range, frozenset)):
+                obj.samples = pd.DataFrame(index=list(samples))
+
+            else:
+                raise TypeError(
+                    f'Features must be a collection of some kind. Got {samples}')
+        else:
+            # no features passed in
+            obj.samples = pd.DataFrame(index=range(n))
+
         if features is not None:
-            assert len(
-                features) == m, f"len(features) == {len(features)}. Expected {m} "
+            lf = len(features)
+            if lf != m:
+                raise ValueError(
+                    f'Feature shape does not match input array. Expected {m}, got {lf}.')
 
-        if isinstance(samples, pd.DataFrame):
-            obj.samples = samples
-        else:
-            samps = samples if samples is not None else list(range(n))
-            obj.samples = pd.DataFrame(index=samps)
+            if isinstance(features, pd.DataFrame):
+                obj.features = features
+            elif isinstance(features, (list, tuple, dict, set, range, frozenset)):
 
-        if isinstance(features, pd.DataFrame):
-            obj.features = features
+                obj.features = pd.DataFrame(index=list(features))
+
+            else:
+                raise TypeError(
+                    f'Features must be a collection of some kind. Got {features}')
         else:
-            feats = features if features is not None else list(range(m))
-            obj.features = pd.DataFrame(index=feats)
+            # no features passed in
+            obj.features = pd.DataFrame(index=range(m))
         return obj
 
     def __array_finalize__(self, obj):
@@ -140,3 +157,12 @@ class Matrix(np.ndarray):
 
         # Combine everything into the final representation
         return col_header + "\n" + "\n".join(rows)
+
+    @property
+    def X(self):
+        """returns the numpy object
+
+        Returns:
+            _type_: _description_
+        """
+        return np.asarray(self)
