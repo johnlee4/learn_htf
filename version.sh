@@ -2,25 +2,25 @@
 
 # Get the latest tag
 latest_tag=$(git describe --tags --abbrev=0)
-IFS='.' read -r major main develop <<< "$latest_tag"
+IFS='.' read -r major master develop <<< "$latest_tag"
 
 # Check which part to increment based on branch name
 branch=$(git rev-parse --abbrev-ref HEAD)
 
-if [[ "$branch" == "main" ]]; then
-  # Increment main version, reset develop
-  main=$((main + 1))
+if [[ "$branch" == "master" ]]; then
+  # Increment master version, reset develop
+  master=$((master + 1))
   develop=0
 elif [[ "$branch" == "develop" ]]; then
   # Increment develop version
   develop=$((develop + 1))
 else
-  echo "Not on main or develop branch, version not updated."
+  echo "Not on master or develop branch, version not updated."
   exit 0
 fi
 
 # Create the new version tag
-new_tag="${major}.${main}.${develop}"
+new_tag="${major}.${master}.${develop}"
 git tag "$new_tag"
 git push origin "$new_tag"
 
