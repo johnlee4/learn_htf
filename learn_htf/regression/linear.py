@@ -5,18 +5,18 @@ Ch 3 - Linear Methods for Regression
 Author: John Lee
 Oct 2024
 """
+# %%
 
 import numpy as np
-from typing import Union
-from scipy.linalg import svd
 
 from learn_htf.core.matrix import Matrix
 from learn_htf.core.model import Model
 from learn_htf.utils.metrics import lp_norm
-# TODO Principle component regression
-# TODO SVD/cholesky/QR decomp
+from learn_htf.utils.preprocessing import z_scale
+
 # TODO handle sparse data
 
+# %%
 # follow an sklearn approach of .fit and .predict
 # model.fit()
 
@@ -28,9 +28,8 @@ class LinearRegression(Model):
 
     def __init__(self, ridge_lambda: float = 0):
         super().__init__(ridge_lambda=ridge_lambda)
-        self.ridge_lambda = self.model_params['ridge_lambda']
 
-    def _fit(self, x: Union[Matrix, np.ndarray], y: Union[Matrix, np.ndarray]):
+    def _fit(self, x: Matrix, y: Matrix):
         """
         Calculates the coefficients (B_i) of a linear fit
             f(X) = B_0 + Sum( X_i B_i )
@@ -44,12 +43,9 @@ class LinearRegression(Model):
         Returns:
             _type_: Coefficients of linear fit: Size M+1 x K
         """
-        if isinstance(x, np.ndarray):
-            x = Matrix(x)
-        if isinstance(y, np.ndarray):
-            y = Matrix(y)
-        xfeats = x.features
 
+        xfeats = x.features
+        yfeats = y.features
         assert x.shape[0] == y.shape[0]
 
         n, p = x.shape
@@ -57,14 +53,20 @@ class LinearRegression(Model):
         coef = np.linalg.solve(
             x.T @ x - self.model_params['ridge_lambda'] * Matrix(np.eye(p+1)), x.T @ y)
 
-        samps = [fr'beta_{i}' for i in range(p+1)]
+        samps = ['intercept'] + list(xfeats.index)
         # TODO use feature space instead of betas - need to include the intercept as well
-        coef = Matrix(coef, samples=samps, features=xfeats)
+        coef = Matrix(coef, samples=samps, features=yfeats)
 
         return coef
 
-    def _predict(self, x):
-        """ TODO
+    def _predict(self, x: Matrix):
+        """_summary_
+
+        Args:
+            x (Matrix): _description_
+
+        Returns:
+            _type_: _description_
         """
         xsamps = x.samples
         xfeats = x.features
@@ -74,7 +76,6 @@ class LinearRegression(Model):
 
         preds = Matrix((self.coefficients.T @ x.T).T)
         preds.samples = xsamps
-        preds.features = xfeats
 
         return preds
 
@@ -85,29 +86,132 @@ class LinearRegression(Model):
         return lp_norm(y, predictions, p=2)
 
 
-class PrincipleComponentsRegression(Model):
+class PrincipleComponentsRegression(LinearRegression):
+
+    def __init__(self, n_components: int = None, ridge_lambda: float = 0.0):
+        super().__init__(ridge_lambda=ridge_lambda)
+        self.model_params['n_components'] = n_components
+
+        self.x_mean = None
+        self.x_std = None
+        self.y_mean = None
+
+        self.principle_components = None
+        self.loadings = None
+        self.singular_values = None
 
     def _fit(self, x, y):
-        pass
+        y_ = y.copy()
+        x_feats = x.features
 
-    def predict(self, x):
-        pass
+        x_, x_mean, x_std = z_scale(x.copy())
+        y_mean = np.mean(y, axis=0, keepdims=True)
+
+        y_ = y_ - y_mean
+
+        self.x_mean = x_mean
+        self.x_std = x_std
+        self.y_mean = y_mean
+
+        u, d, vt = np.linalg.svd(x_, full_matrices=False)
+
+        self.loadings = vt.T
+        self.principle_components = u
+        self.singular_values = Matrix(d)
+        n_components = x.shape[1] - 1
+        n_components = min(n_components, self.model_params['n_components'])
+        self.model_params['n_components'] = n_components
+
+        self._log.info('Using n_components = %i',  n_components)
+
+        z = u[:, :n_components] @ np.diag(d[:n_components])
+        coefs = super()._fit(z, y_)
+
+        samps = ['intercept']
+        for i in range(n_components):
+            samps.append(f'PC_{i}')
+        coefs = Matrix(coefs.X, samples=samps)
+        return coefs
+
+    def _predict(self, x):
+        # assumes that x has not been scaled
+        x_ = (x - self.x_mean) / self.x_std
+        n_components = self.model_params['n_components']
+        z = x_ @ self.loadings[:, :n_components]
+
+        preds = super()._predict(z)
+        preds += self.y_mean
+        return preds
 
     def score(self, x, y):
         pass
 
 
-def principle_components_regression(x: np.ndarray, y: np.ndarray, pct_variance=.9, x_centered=False):
+class LassoRegression(Model):
+    """TODO
 
-    b0 = y.mean(axis=0)
+    Args:
+        Model (_type_): _description_
+    """
 
-    if not x_centered:
-        x = x - x.mean(axis=0)
-    u, d, vt = svd(x, full_matrices=False)
+    def __init__(self):
+        super().__init__()
 
-    # get the first PC where we reach pct_variance
-    explanined_variance = d**2 / d.sum(0)
-    npc = np.nonzero(np.cumsum(explanined_variance) > pct_variance)[0][0]
+    def _fit(self):
+        pass
 
-    # x@vt.T
-    # (y - b0 + u[:, :npc]@u[:, :npc].T@y)
+    def _predict(self):
+        pass
+
+    def _score(self):
+        pass
+
+
+class PartialLeastSquaresRegression(Model):
+    """TODO
+
+    Args:
+        Model (_type_): _description_
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def _fit(self):
+        pass
+
+    def _predict(self):
+        pass
+
+    def score(self):
+        pass
+
+
+# %%
+if __name__ == '__main__':
+    from learn_htf.utils.preprocessing import expand_basis
+    # TODO move tests to test directory
+
+    xx = np.array([
+        [2.5, .5, 2.2, 1.9, 3.1, 2.3, 2.0, 1.0, 1.5, 1.1],
+        [3.1, .7, 2.9, 2.2, 3.9, 2.7, 1.6, 1.1, 1.6, .9],
+        [1.2, .3, 1.1, .9, 1.8, 1.2, 1., .5, .7, .4]
+    ]).T
+    yy = np.array([10.1, 4.8, 8.9, 7.2, 12.3, 9.6, 6.5, 3.4, 5.6, 4.2])
+
+    xx = Matrix(xx)
+    yy = Matrix(yy)
+
+    lr = LinearRegression(ridge_lambda=0)
+    coefficients = lr.fit(xx, yy)
+    predictions = lr.predict(xx)
+
+    pcr = PrincipleComponentsRegression(n_components=4, ridge_lambda=0)
+    coefficients = pcr.fit(xx, yy)
+    predictions = pcr.predict(xx)
+
+    # basis expansion
+    xx = expand_basis(xx, [np.square, np.sqrt], include_input=True)
+    lr = LinearRegression()
+    lr.fit(xx, yy)
+    lr.predict(xx)
